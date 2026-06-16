@@ -20,6 +20,7 @@ uv.lock
 # Frontend
 node_modules/
 dist/
+package-lock.json
 
 # macOS
 .DS_Store

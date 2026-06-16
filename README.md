@@ -47,12 +47,12 @@ uv run backend/app.py
 
 > 依赖声明在 `app.py` 顶部的 PEP 723 元数据中，`uv run` 会自动解析并安装，无需手动 `pip install`。
 
-### 2. 前端（React）
+### 2. 前端（React + pnpm）
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 运行在 http://localhost:3000
