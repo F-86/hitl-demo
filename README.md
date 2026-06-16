@@ -1,54 +1,53 @@
-# Human-in-the-Loop Demo: AI Writing Assistant
+# Human-in-the-Loop 演示：AI 写作助手
 
-A full-stack demo showcasing **Human-in-the-Loop (HITL)** interaction pattern with AI.
+一个全栈 Demo，展示 **Human-in-the-Loop（HITL）** 人机协作模式。
 
-**Frontend:** React (Vite)  
-**Backend:** Python (FastAPI)  
-**AI Model:** DeepSeek V4 Flash  
+**前端:** React (Vite)  
+**后端:** Python (FastAPI)，通过 uv 运行  
+**AI 模型:** DeepSeek V4 Flash  
 
-## 🎯 What is Human-in-the-Loop?
+## 🎯 什么是 Human-in-the-Loop？
 
-HITL is a design pattern where AI and humans collaborate:  
-- **AI proposes** improvements or decisions  
-- **Human reviews, edits, approves, or rejects**  
-- **AI incorporates feedback** and learns from human choices  
+HITL 是一种人机协作的设计模式：
 
-This demo implements an **AI Writing Assistant** that follows this pattern exactly.
+- **AI 提出** 修改建议
+- **人类审核、编辑、采纳或拒绝**
+- **AI 根据反馈** 执行修改，进入下一轮
 
-## 🔄 HITL Flow
+这个 Demo 实现了一个完整的 AI 写作助手，严格遵循上述流程。
+
+## 🔄 交互流程
 
 ```
 ┌───────────┐     ┌───────────┐     ┌───────────┐
-│  Human    │────▶│    AI     │────▶│  Human    │
-│ writes    │     │ reviews   │     │ accepts/  │
-│ text      │     │ text      │     │ rejects   │
+│  人类     │────▶│    AI     │────▶│  人类     │
+│  撰写文本  │     │  审阅文本  │     │ 采纳/拒绝  │
 └───────────┘     └───────────┘     └───────────┘
                                             │
                     ┌───────────────────────┘
                     ▼
               ┌───────────┐
               │    AI     │
-              │ applies   │
-              │ changes   │
+              │  应用修改  │
               └───────────┘
                     │
                     ▼
-              (loop back for more review)
+              （循环继续）
 ```
 
-## 🚀 Quick Start
+## 🚀 快速开始
 
-### 1. Backend (Python)
+### 1. 后端（Python + uv）
 
 ```bash
-cd backend
-pip install -r requirements.txt
-python app.py
+uv run backend/app.py
 ```
 
-Runs on http://localhost:8000
+服务运行在 http://localhost:8000
 
-### 2. Frontend (React)
+> 依赖声明在 `app.py` 顶部的 PEP 723 元数据中，`uv run` 会自动解析并安装，无需手动 `pip install`。
+
+### 2. 前端（React）
 
 ```bash
 cd frontend
@@ -56,51 +55,56 @@ npm install
 npm run dev
 ```
 
-Runs on http://localhost:3000
+运行在 http://localhost:3000
 
-### 3. Use the App
+### 3. 使用方式
 
-1. Write or paste text in the editor
-2. Click **"Ask AI to Review"** — AI analyzes and suggests improvements
-3. For each suggestion:
-   - **Accept** — apply the AI's suggestion
-   - **Edit & Accept** — modify the suggestion, then apply
-   - **New Suggestion** — reject and get a different suggestion
-   - **Skip** — ignore this suggestion
-4. After processing all suggestions, click **"Ask AI to Review"** again for another pass
+1. 在编辑器中输入或粘贴文本
+2. 点击 **"Ask AI to Review"** —— AI 分析文本并给出修改建议
+3. 对每条建议：
+   - **Accept** —— 采纳 AI 建议
+   - **Edit & Accept** —— 修改建议后再采纳
+   - **New Suggestion** —— 拒绝当前建议，换一条
+   - **Skip** —— 跳过这条建议
+4. 处理完所有建议后，再次点击 **"Ask AI to Review"** 开始新一轮审阅
 
-## 🏗️ Architecture
+## 🏗️ 项目结构
 
 ```
 hitl-demo/
 ├── backend/
-│   ├── app.py              # FastAPI server with DeepSeek integration
-│   └── requirements.txt    # Python dependencies
+│   ├── app.py              # FastAPI 服务，集成 DeepSeek
+│   └── requirements.txt    # Python 依赖（用于兼容传统 pip 方式）
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx         # Main React component
-│   │   ├── App.css         # Styles
-│   │   └── main.jsx        # Entry point
+│   │   ├── App.jsx         # 主 React 组件
+│   │   ├── App.css         # 样式
+│   │   └── main.jsx        # 入口
 │   ├── index.html
 │   ├── package.json
-│   └── vite.config.js      # Vite config with API proxy
+│   └── vite.config.js      # Vite 配置（含 API 代理）
 └── README.md
 ```
 
 ## 🔑 API Key
 
-The DeepSeek API key is configured in `backend/app.py`.  
-For production, set the `DEEPSEEK_API_KEY` environment variable.
+DeepSeek API Key 通过环境变量 `DEEPSEEK_API_KEY` 配置。你可以在项目根目录创建 `.env` 文件：
 
-## 📡 API Endpoints
+```
+DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxx
+```
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/health` | Health check |
-| `POST` | `/api/review` | AI reviews text, returns suggestions |
-| `POST` | `/api/apply` | Human accepts/edits a suggestion, AI applies it |
-| `POST` | `/api/regenerate` | Human rejects a suggestion, AI generates new one |
+> `.env` 已加入 `.gitignore`，不会被提交到仓库。
 
-## 🧠 Model
+## 📡 API 接口
 
-Uses **deepseek-v4-flash** via DeepSeek's OpenAI-compatible API (`https://api.deepseek.com/v1`).
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/health` | 健康检查 |
+| `POST` | `/api/review` | AI 审阅文本，返回修改建议 |
+| `POST` | `/api/apply` | 人类采纳/编辑建议，AI 应用修改 |
+| `POST` | `/api/regenerate` | 人类拒绝建议，AI 重新生成 |
+
+## 🧠 模型
+
+使用 **deepseek-v4-flash**，通过 DeepSeek 的 OpenAI 兼容 API（`https://api.deepseek.com/v1`）。
