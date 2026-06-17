@@ -108,3 +108,13 @@ DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxx
 ## 🧠 模型
 
 使用 **deepseek-v4-flash**，通过 DeepSeek 的 OpenAI 兼容 API（`https://api.deepseek.com/v1`）。
+
+## 📚 深度文档
+
+完整的技术文档在 `docs/` 目录下：
+
+- **[01-OVERVIEW.md](docs/01-OVERVIEW.md)** - 项目概览和快速入门
+- **[02-PROMPT-DESIGN.md](docs/02-PROMPT-DESIGN.md)** - 提示词设计策略（三个 API 的 prompt 详解）
+- **[03-FRONTEND.md](docs/03-FRONTEND.md)** - React 前端实现（状态管理、交互逻辑）
+- **[04-BACKEND.md](docs/04-BACKEND.md)** - FastAPI 后端实现（三个端点详解）
+- **[05-DESIGN-DECISIONS.md](docs/05-DESIGN-DECISIONS.md)** - 关键设计决策（为什么这样做）
