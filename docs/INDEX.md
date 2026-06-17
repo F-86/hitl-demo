@@ -103,12 +103,6 @@
 
 ---
 
-### 📚 完整文档
-
-- **[HITL_IMPLEMENTATION.md](../HITL_IMPLEMENTATION.md)** - 完整技术文档（保留）
-  - 所有内容的综合版本
-  - 适合全面查阅
-
 ---
 
 ## 🎯 按角色阅读指南
@@ -219,8 +213,6 @@ README.md
     ├─→ 03-FRONTEND.md (前端工程师)
     ├─→ 04-BACKEND.md (后端工程师)
     └─→ 05-DESIGN-DECISIONS.md (架构师/新贡献者)
-    
-HITL_IMPLEMENTATION.md (全面参考)
 ```
 
 ---
