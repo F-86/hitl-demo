@@ -4,9 +4,12 @@ const API = '/api'
 
 export default function App() {
   const [text, setText] = useState(
-    "The quick brown fox jump over the lazy dog. Its a beautiful day, and the birds is singing. I think we should of gone earlier, but its too late now. Their are many things to do and not enough time for it."
+    "快速的棕色狐狸跳过了懒狗。这是美好的一天，鸟儿在唱歌。我想我们应该早点去，但现在太晚了。有许多事情要做，时间不够。"
   )
   const [suggestions, setSuggestions] = useState([])
+  const [currentSuggestionIndex, setCurrentSuggestionIndex] = useState(0)
+  const [totalSuggestions, setTotalSuggestions] = useState(0)
+  const [completedSuggestions, setCompletedSuggestions] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
@@ -20,7 +23,7 @@ export default function App() {
     fetch(`${API}/health`)
       .then(r => r.json())
       .then(d => console.log('Backend:', d))
-      .catch(() => setError('Backend not reachable. Start it with: cd backend && python app.py'))
+      .catch(() => setError('后端无法连接。请运行: cd backend && python app.py'))
   }, [])
 
   // ── Step 1: Ask AI to review ──────────────────────────────────────
@@ -37,14 +40,20 @@ export default function App() {
       const res = await fetch(`${API}/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, context: 'general writing' }),
+        body: JSON.stringify({ text, context: '通用写作' }),
       })
       if (!res.ok) throw new Error((await res.json()).detail || 'Review failed')
       const data = await res.json()
       setSuggestions(data.suggestions || [])
       setStatus(data.suggestions?.length ? 'waiting' : 'done')
+      setCurrentSuggestionIndex(0)
+      setTotalSuggestions(data.suggestions?.length || 0)
+      setCompletedSuggestions(0)
+      setTotalSuggestions(data.suggestions?.length || 0)
+      setCompletedSuggestions(0)
+      setCurrentSuggestionIndex(0)
       if (!data.suggestions?.length) {
-        setFeedback('✨ No improvements found — your text looks great!')
+        setFeedback('✨ 没有发现改进之处 — 您的文本很棒！')
       }
     } catch (e) {
       setError(e.message)
@@ -68,13 +77,15 @@ export default function App() {
           suggestion_id: suggestion.id,
           accepted: true,
           edited_suggestion: editedText || '',
+          original: suggestion.original,
+          suggested: suggestion.suggested,
         }),
       })
       if (!res.ok) throw new Error((await res.json()).detail || 'Apply failed')
       const data = await res.json()
 
       setHistory(prev => [...prev, {
-        action: editedText ? 'edited' : 'accepted',
+        action: editedText ? '已编辑' : '已接受',
         original: suggestion.original,
         result: editedText || suggestion.suggested,
         explanation: suggestion.explanation,
@@ -82,8 +93,14 @@ export default function App() {
 
       setText(data.new_text)
       setSuggestions(prev => prev.filter(s => s.id !== suggestion.id))
-      setFeedback(`✅ Accepted: "${suggestion.explanation}"`)
-      setStatus(suggestions.length <= 1 ? 'idle' : 'waiting')
+      setCompletedSuggestions(prev => prev + 1)
+      setFeedback(`✅ 已接受: "${suggestion.explanation}"`)
+
+      if (suggestions.length <= 1) {
+        setStatus('idle')
+      } else {
+        setCurrentSuggestionIndex(prev => Math.min(prev, suggestions.length - 2))
+      }
     } catch (e) {
       setError(e.message)
     } finally {
@@ -100,7 +117,12 @@ export default function App() {
       const res = await fetch(`${API}/regenerate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, rejected_id: suggestion.id }),
+        body: JSON.stringify({
+          text,
+          original_segment: suggestion.original,
+          rejected_type: suggestion.type,
+          rejected_suggestion: suggestion.suggested,
+        }),
       })
       if (!res.ok) throw new Error((await res.json()).detail || 'Regenerate failed')
       const data = await res.json()
@@ -109,7 +131,7 @@ export default function App() {
       setSuggestions(prev =>
         prev.map(s => (s.id === suggestion.id ? { ...data.suggestion, id: suggestion.id } : s))
       )
-      setFeedback('🔄 Generated a new suggestion.')
+      setFeedback('🔄 已生成新建议。')
     } catch (e) {
       setError(e.message)
     } finally {
@@ -121,8 +143,14 @@ export default function App() {
 
   const handleSkip = (suggestion) => {
     setSuggestions(prev => prev.filter(s => s.id !== suggestion.id))
-    setFeedback(`⏭️ Skipped suggestion about ${suggestion.type}.`)
-    if (suggestions.length <= 1) setStatus('idle')
+    setCompletedSuggestions(prev => prev + 1)
+    setFeedback(`⏭️ 已跳过关于 ${suggestion.type} 的建议。`)
+
+    if (suggestions.length <= 1) {
+      setStatus('idle')
+    } else {
+      setCurrentSuggestionIndex(prev => Math.min(prev, suggestions.length - 2))
+    }
   }
 
   // ── Render helpers ────────────────────────────────────────────────
@@ -135,29 +163,29 @@ export default function App() {
   }
 
   const typeLabels = {
-    grammar: '📝 Grammar',
-    clarity: '💡 Clarity',
-    style: '🎨 Style',
-    brevity: '✂️ Brevity',
+    grammar: '📝 语法',
+    clarity: '💡 清晰度',
+    style: '🎨 风格',
+    brevity: '✂️ 简洁度',
   }
 
   return (
     <div className="app">
       <header className="header">
-        <h1>🤖 Human-in-the-Loop Demo</h1>
-        <p className="subtitle">AI Writing Assistant — You're in Control</p>
+        <h1>🤖 人类反馈循环演示</h1>
+        <p className="subtitle">AI 写作助手 — 由您掌控</p>
       </header>
 
       <main className="main">
-        {/* ── Text input area ── */}
+        {/* ── 文本输入区 ── */}
         <section className="text-section">
-          <label className="section-label">Your Text</label>
+          <label className="section-label">您的文本</label>
           <textarea
             ref={textRef}
             className="text-editor"
             value={text}
             onChange={e => { setText(e.target.value); setStatus('idle'); setSuggestions([]) }}
-            placeholder="Write or paste your text here..."
+            placeholder="在此输入或粘贴您的文本..."
             rows={6}
           />
           <button
@@ -165,50 +193,45 @@ export default function App() {
             onClick={handleReview}
             disabled={loading || !text.trim()}
           >
-            {loading ? '⏳ AI is reviewing...' : '🔍 Ask AI to Review'}
+            {loading ? '⏳ AI 正在审阅...' : '🔍 请求 AI 审阅'}
           </button>
         </section>
 
-        {/* ── Error / Feedback ── */}
+        {/* ── 错误/反馈 ── */}
         {error && <div className="alert alert-error">{error}</div>}
         {feedback && !error && <div className="alert alert-info">{feedback}</div>}
 
-        {/* ── Suggestions panel (HITL step) ── */}
+        {/* ── 建议面板 (HITL 步骤) ── */}
         {status === 'waiting' && suggestions.length > 0 && (
           <section className="suggestions-section">
             <h2 className="section-label">
-              🤔 AI Suggestions ({suggestions.length} remaining)
+              🤔 AI 建议 (已完成 {completedSuggestions} / {totalSuggestions})
             </h2>
-            <p className="hint">
-              Review each suggestion. <strong>Accept</strong>, <strong>Edit & Accept</strong>,
-              or <strong>Reject</strong> for a new one. <strong>Skip</strong> to ignore.
-            </p>
 
-            {suggestions.map((sug, idx) => (
-              <SuggestionCard
-                key={sug.id}
-                suggestion={sug}
-                index={idx}
-                typeColors={typeColors}
-                typeLabels={typeLabels}
-                onAccept={handleAccept}
-                onReject={handleReject}
-                onSkip={handleSkip}
-                disabled={loading}
-              />
-            ))}
+            <SuggestionCard
+              suggestion={suggestions[currentSuggestionIndex]}
+              index={currentSuggestionIndex}
+              typeColors={typeColors}
+              typeLabels={typeLabels}
+              onAccept={handleAccept}
+              onReject={handleReject}
+              onSkip={handleSkip}
+              disabled={loading}
+              totalSuggestions={totalSuggestions}
+              completedSuggestions={completedSuggestions}
+            />
           </section>
         )}
 
-        {/* ── History ── */}
+        {/* ── 历史记录 ── */}
         {history.length > 0 && (
           <section className="history-section">
-            <h2 className="section-label">📋 Change History</h2>
+            <h2 className="section-label">📋 修改历史</h2>
             <ul className="history-list">
               {history.map((h, i) => (
                 <li key={i} className="history-item">
                   <span className="history-action">
-                    {h.action === 'edited' ? '✏️ Edited' : '✅ Accepted'}:
+                    {h.action === '已编辑' ? '✏️ 已编辑' : '✅ 已接受'}:
                   </span>
                   <span className="history-detail"> {h.explanation}</span>
                 </li>
@@ -220,90 +243,86 @@ export default function App() {
 
       <footer className="footer">
         <p>
-          <strong>How HITL works:</strong> AI proposes edits → You review & decide → AI learns from your choices.
+          <strong>HITL 工作原理:</strong> AI 提议修改 → 您审查并决定 → AI 从您的选择中学习。
         </p>
       </footer>
     </div>
   )
 }
 
-// ── Suggestion Card Component ────────────────────────────────────────
+// ── 建议卡片组件 ────────────────────────────────────────
 
-function SuggestionCard({ suggestion, index, typeColors, typeLabels, onAccept, onReject, onSkip, disabled }) {
+function SuggestionCard({ suggestion, index, typeColors, typeLabels, onAccept, onReject, onSkip, disabled, totalSuggestions, completedSuggestions }) {
   const [editing, setEditing] = useState(false)
   const [editedValue, setEditedValue] = useState(suggestion.suggested)
-  const [expanded, setExpanded] = useState(true)
 
   return (
     <div className="suggestion-card" style={{ borderLeftColor: typeColors[suggestion.type] || '#666' }}>
-      <div className="suggestion-header" onClick={() => setExpanded(!expanded)}>
+      <div className="suggestion-header">
         <span className="suggestion-badge" style={{ background: typeColors[suggestion.type] || '#666' }}>
           {typeLabels[suggestion.type] || suggestion.type}
         </span>
-        <span className="suggestion-num">#{index + 1}</span>
-        <span className="expand-toggle">{expanded ? '▼' : '▶'}</span>
+        <span className="suggestion-progress">第 {completedSuggestions + 1} / {totalSuggestions} 条</span>
       </div>
 
-      {expanded && (
-        <div className="suggestion-body">
-          <div className="suggestion-row">
-            <span className="label">Original:</span>
-            <span className="original-text">"{suggestion.original}"</span>
-          </div>
-
-          {editing ? (
-            <div className="suggestion-row edit-row">
-              <span className="label">Your Edit:</span>
-              <input
-                type="text"
-                value={editedValue}
-                onChange={e => setEditedValue(e.target.value)}
-                className="edit-input"
-                autoFocus
-              />
-            </div>
-          ) : (
-            <div className="suggestion-row">
-              <span className="label">Suggested:</span>
-              <span className="suggested-text">"{suggestion.suggested}"</span>
-            </div>
-          )}
-
-          <p className="explanation">{suggestion.explanation}</p>
-
-          <div className="suggestion-actions">
-            {editing ? (
-              <>
-                <button
-                  className="btn btn-accept"
-                  disabled={disabled}
-                  onClick={() => { onAccept(suggestion, editedValue); setEditing(false) }}
-                >
-                  ✅ Confirm Edit
-                </button>
-                <button className="btn btn-ghost" onClick={() => { setEditing(false); setEditedValue(suggestion.suggested) }}>
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <>
-                <button className="btn btn-accept" disabled={disabled} onClick={() => onAccept(suggestion, '')}>
-                  ✅ Accept
-                </button>
-                <button className="btn btn-edit" disabled={disabled} onClick={() => setEditing(true)}>
-                  ✏️ Edit
-                </button>
-                <button className="btn btn-reject" disabled={disabled} onClick={() => onReject(suggestion)}>
-                  🔄 New Suggestion
-                </button>
-                <button className="btn btn-ghost" disabled={disabled} onClick={() => onSkip(suggestion)}>
-                  ⏭️ Skip
-                </button>
-              </>
-            )}
-          </div>
+      <div className="suggestion-body">
+        <div className="suggestion-row">
+          <span className="label">原文:</span>
+          <span className="original-text">"{suggestion.original}"</span>
         </div>
-      )}
+
+        {editing ? (
+          <div className="suggestion-row edit-row">
+            <span className="label">您的修改:</span>
+            <input
+              type="text"
+              value={editedValue}
+              onChange={e => setEditedValue(e.target.value)}
+              className="edit-input"
+              autoFocus
+            />
+          </div>
+        ) : (
+          <div className="suggestion-row">
+            <span className="label">建议:</span>
+            <span className="suggested-text">"{suggestion.suggested}"</span>
+          </div>
+        )}
+
+        <p className="explanation">{suggestion.explanation}</p>
+
+        <div className="suggestion-actions">
+          {editing ? (
+            <>
+              <button
+                className="btn btn-accept"
+                disabled={disabled}
+                onClick={() => { onAccept(suggestion, editedValue); setEditing(false) }}
+              >
+                ✅ 确认修改
+              </button>
+              <button className="btn btn-ghost" onClick={() => { setEditing(false); setEditedValue(suggestion.suggested) }}>
+                取消
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-accept" disabled={disabled} onClick={() => onAccept(suggestion, '')}>
+                ✅ 接受
+              </button>
+              <button className="btn btn-edit" disabled={disabled} onClick={() => setEditing(true)}>
+                ✏️ 编辑
+              </button>
+              <button className="btn btn-reject" disabled={disabled} onClick={() => onReject(suggestion)}>
+                🔄 新建议
+              </button>
+              <button className="btn btn-ghost" disabled={disabled} onClick={() => onSkip(suggestion)}>
+                ⏭️ 跳过
+              </button>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

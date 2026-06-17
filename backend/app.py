@@ -69,13 +69,19 @@ class ApplyRequest(BaseModel):
     suggestion_id: str
     accepted: bool
     edited_suggestion: str = ""  # if human edits the suggestion before accepting
+    original: str = ""  # the original text segment to replace
+    suggested: str = ""  # the suggested replacement text
+    original: str = ""  # the original text segment to replace
+    suggested: str = ""  # the suggested replacement text
 
 class ApplyResponse(BaseModel):
     new_text: str
 
 class RegenerateRequest(BaseModel):
-    text: str
-    rejected_id: str  # the suggestion being rejected
+    text: str  # 完整的原文，用于保留语境
+    original_segment: str  # 要改进的原文段落
+    rejected_type: str     # 被拒的建议类型 (grammar, clarity, style, brevity)
+    rejected_suggestion: str = ""  # 被拒的建议内容
 
 class RegenerateResponse(BaseModel):
     suggestion: Suggestion
@@ -97,25 +103,23 @@ def review_text(req: ReviewRequest):
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
 
-    context_hint = f" Context: {req.context}." if req.context else ""
+    context_hint = f"Context: {req.context}. " if req.context else ""
 
-    prompt = f"""You are a helpful writing assistant. Review the following text and suggest up to 3 improvements.{context_hint}
-
+    prompt = f"""You are a helpful writing assistant. Review the following text and suggest up to 3 improvements.
+{context_hint}
 For each suggestion, identify:
 - The exact original text segment to replace
 - Your suggested replacement
-- The type of improvement (grammar, clarity, style, or brevity)
+- The type of improvement: grammar, clarity, style, or brevity
 - A brief explanation
 
-IMPORTANT: Return your response as valid JSON only, no markdown or other text. Use this exact format:
+Return ONLY valid JSON with no markdown or extra text. Use this exact format:
 {{"suggestions": [
-  {{"type": "grammar", "original": "exact text to replace", "suggested": "replacement text", "explanation": "why this improves the text"}}
+  {{"type": "grammar", "original": "exact text", "suggested": "replacement", "explanation": "reason"}}
 ]}}
 
 Text to review:
-\"\"\"
-{req.text}
-\"\"\""""
+{req.text}"""
 
     try:
         response = client.chat.completions.create(
@@ -126,7 +130,11 @@ Text to review:
             response_format={"type": "json_object"},
         )
         import json
-        result = json.loads(response.choices[0].message.content)
+        content = response.choices[0].message.content
+        if not content or not content.strip():
+            raise HTTPException(status_code=500, detail="AI returned empty response")
+
+        result = json.loads(content)
 
         # Assign unique IDs to each suggestion
         suggestions = result.get("suggestions", [])
@@ -135,6 +143,8 @@ Text to review:
 
         return ReviewResponse(suggestions=suggestions[:3])
 
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"AI returned invalid JSON: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI review failed: {str(e)}")
 
@@ -152,14 +162,23 @@ def apply_suggestion(req: ApplyRequest):
     if req.accepted and req.edited_suggestion:
         # Human edited the suggestion before accepting
         replacement = req.edited_suggestion
-        instruction = f"""The user accepted a suggestion but modified it.
-Replace the relevant part of the text with this edited version: "{replacement}"
+        original_segment = req.original
+        instruction = f"""Replace this exact text segment:
+"{original_segment}"
+
+With this edited version:
+"{replacement}"
 
 Return the full updated text as valid JSON:
 {{"new_text": "the complete updated text"}}"""
     elif req.accepted:
-        instruction = f"""The user accepted suggestion #{req.suggestion_id}.
-Replace the relevant part of the text with the accepted suggestion.
+        original_segment = req.original
+        replacement = req.suggested
+        instruction = f"""Replace this exact text segment:
+"{original_segment}"
+
+With this replacement:
+"{replacement}"
 
 Return the full updated text as valid JSON:
 {{"new_text": "the complete updated text"}}"""
@@ -167,7 +186,7 @@ Return the full updated text as valid JSON:
         # Rejected - no change needed
         return ApplyResponse(new_text=req.text)
 
-    prompt = f"""Apply the accepted change to the text below.
+    prompt = f"""Apply the text replacement below.
 {instruction}
 
 Original text:
@@ -195,29 +214,37 @@ Original text:
 def regenerate_suggestion(req: RegenerateRequest):
     """
     Human rejects a suggestion and wants a different one.
-    AI generates a new, different suggestion for the same text.
-    This is step 2b of HITL: human rejects → AI re-proposes.
+    AI generates a new, different suggestion for the specific text segment.
+    This is step 2b of HITL: human rejects → AI re-proposes a different improvement.
     """
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
+    if not req.original_segment.strip():
+        raise HTTPException(status_code=400, detail="Original segment cannot be empty")
 
-    prompt = f"""You previously suggested an improvement to this text, but the user rejected it.
-Generate a DIFFERENT suggestion this time - focus on a different aspect.
+    other_types = [t for t in ["grammar", "clarity", "style", "brevity"] if t != req.rejected_type]
 
-Text:
-\"\"\"
+    prompt = f"""You are a writing assistant. The user rejected a suggestion and wants a different improvement.
+
+Context: Here is the full text:
 {req.text}
-\"\"\"
 
-Return valid JSON only:
-{{"suggestion": {{"type": "grammar|clarity|style|brevity", "original": "exact text to replace", "suggested": "replacement text", "explanation": "why this improves the text"}}}}"""
+The specific segment being reviewed: "{req.original_segment}"
+
+The rejected suggestion (type: {req.rejected_type}): "{req.rejected_suggestion}"
+
+Please provide a DIFFERENT improvement suggestion for this segment. Focus on a different aspect from {req.rejected_type}.
+Consider these alternatives: {', '.join(other_types)}
+
+Return ONLY valid JSON with no markdown or extra text:
+{{"suggestion": {{"type": "grammar|clarity|style|brevity", "original": "{req.original_segment}", "suggested": "replacement text", "explanation": "why this improves the text"}}}}"""
 
     try:
         response = client.chat.completions.create(
             model=MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
-            max_tokens=2000,
+            max_tokens=1000,
             response_format={"type": "json_object"},
         )
         import json
