@@ -9,17 +9,17 @@
 # ///
 
 """
-Human-in-the-Loop Demo - Backend (FastAPI + DeepSeek)
-======================================================
-A simple API that powers an AI writing assistant with human review.
-The AI proposes edits, the human approves/rejects, and the cycle continues.
+人类反馈循环演示 - 后端 (FastAPI + DeepSeek)
+=============================================
+一个为 AI 写作助手提供支持的简单 API，包含人类审查流程。
+AI 提议修改，人类批准/拒绝，循环继续。
 
-Flow:
-  1. POST /api/review     - AI reviews user's text and suggests one improvement
-  2. POST /api/apply      - Human accepts a suggestion, AI applies it
-  3. POST /api/regenerate - Human rejects, AI generates a new suggestion
+流程：
+  1. POST /api/review     - AI 审阅用户文本并建议改进
+  2. POST /api/apply      - 人类接受建议，AI 应用修改
+  3. POST /api/regenerate - 人类拒绝，AI 生成新建议
 
-Uses DeepSeek API (OpenAI-compatible) for all LLM calls.
+所有 LLM 调用使用 DeepSeek API (OpenAI 兼容)。
 """
 
 import os
@@ -41,25 +41,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# DeepSeek client (OpenAI-compatible)
+# DeepSeek 客户端 (OpenAI 兼容)
 client = OpenAI(
     api_key=os.getenv("DEEPSEEK_API_KEY"),
     base_url="https://api.deepseek.com/v1",
 )
 MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 
-# ── Request/Response models ──────────────────────────────────────────
+# ── 请求/响应模型 ──────────────────────────────────────────
 
 class ReviewRequest(BaseModel):
     text: str
-    context: str = ""  # optional: what kind of writing this is
+    context: str = ""  # 可选：文本类型说明
 
 class Suggestion(BaseModel):
-    id: str          # unique ID for this suggestion
-    type: str        # "grammar", "clarity", "style", "brevity"
-    original: str    # the original text segment
-    suggested: str   # the AI's suggested replacement
-    explanation: str # why this change is recommended
+    id: str          # 该建议的唯一ID
+    type: str        # "grammar" (语法), "clarity" (清晰度), "style" (风格), "brevity" (简洁度)
+    original: str    # 原始文本段落
+    suggested: str   # AI 建议的替代文本
+    explanation: str # 为什么推荐这个修改
 
 class ReviewResponse(BaseModel):
     suggestions: list[Suggestion]
@@ -68,11 +68,9 @@ class ApplyRequest(BaseModel):
     text: str
     suggestion_id: str
     accepted: bool
-    edited_suggestion: str = ""  # if human edits the suggestion before accepting
-    original: str = ""  # the original text segment to replace
-    suggested: str = ""  # the suggested replacement text
-    original: str = ""  # the original text segment to replace
-    suggested: str = ""  # the suggested replacement text
+    edited_suggestion: str = ""  # 人类在接受前编辑的建议
+    original: str = ""  # 要替换的原始文本段落
+    suggested: str = ""  # 建议的替代文本
 
 class ApplyResponse(BaseModel):
     new_text: str
@@ -87,7 +85,7 @@ class RegenerateResponse(BaseModel):
     suggestion: Suggestion
 
 
-# ── Routes ───────────────────────────────────────────────────────────
+# ── 路由 ───────────────────────────────────────────────────────────
 
 @app.get("/api/health")
 def health():
@@ -97,8 +95,8 @@ def health():
 @app.post("/api/review", response_model=ReviewResponse)
 def review_text(req: ReviewRequest):
     """
-    AI reviews the user's text and returns up to 3 suggestions.
-    This is the first step in the HITL cycle: AI proposes → human decides.
+    AI 审阅用户文本并返回最多 3 条建议。
+    这是 HITL 循环的第一步：AI 提议 → 人类决策。
     """
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
@@ -136,7 +134,7 @@ Text to review:
 
         result = json.loads(content)
 
-        # Assign unique IDs to each suggestion
+        # 为每个建议分配唯一 ID
         suggestions = result.get("suggestions", [])
         for i, s in enumerate(suggestions):
             s["id"] = f"sug-{i+1}"
@@ -152,15 +150,15 @@ Text to review:
 @app.post("/api/apply", response_model=ApplyResponse)
 def apply_suggestion(req: ApplyRequest):
     """
-    Human accepts (or edits-and-accepts) a suggestion.
-    AI applies the change and returns the updated text.
-    This is step 2 of HITL: human decision → AI executes.
+    人类接受（或编辑后接受）一个建议。
+    AI 应用修改并返回更新后的文本。
+    这是 HITL 的第 2 步：人类决策 → AI 执行。
     """
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
 
     if req.accepted and req.edited_suggestion:
-        # Human edited the suggestion before accepting
+        # 人类在接受前编辑了建议
         replacement = req.edited_suggestion
         original_segment = req.original
         instruction = f"""Replace this exact text segment:
@@ -183,7 +181,7 @@ With this replacement:
 Return the full updated text as valid JSON:
 {{"new_text": "the complete updated text"}}"""
     else:
-        # Rejected - no change needed
+        # 被拒绝 - 无需修改
         return ApplyResponse(new_text=req.text)
 
     prompt = f"""Apply the text replacement below.
@@ -213,9 +211,9 @@ Original text:
 @app.post("/api/regenerate", response_model=RegenerateResponse)
 def regenerate_suggestion(req: RegenerateRequest):
     """
-    Human rejects a suggestion and wants a different one.
-    AI generates a new, different suggestion for the specific text segment.
-    This is step 2b of HITL: human rejects → AI re-proposes a different improvement.
+    人类拒绝一个建议并想要不同的建议。
+    AI 为特定文本段落生成新的、不同的建议。
+    这是 HITL 的第 2b 步：人类拒绝 → AI 重新提议。
     """
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
